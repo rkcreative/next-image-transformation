@@ -1,12 +1,13 @@
 services:
   api:
-    image: ghcr.io/coollabsio/next-image-transformation
+    image: ghcr.io/r0bdiabl0/next-image-transformation
     ports:
       - "3000"
     environment:
       - NODE_ENV=production
       - ALLOWED_REMOTE_DOMAINS=*
       - IMGPROXY_URL=http://imgproxy:8080
+      - CACHE_TTL=2592000
     healthcheck:
       test: "wget -qO- http://localhost:3000/health || exit 1"
       interval: 2s
@@ -22,6 +23,8 @@ services:
       - IMGPROXY_ENABLE_AVIF_DETECTION=true
       - IMGPROXY_JPEG_PROGRESSIVE=true
       - IMGPROXY_USE_ETAG=true
+      - IMGPROXY_MAX_SRC_RESOLUTION=50
+      - IMGPROXY_MAX_ANIMATION_FRAMES=1
     healthcheck:
       test: [ "CMD", "imgproxy", "health" ]
       interval: 2s

@@ -1,73 +1,107 @@
-# Next.js Image Transformation
+# Next.js Image Transformation (Improved Fork)
 
-An open-source & self-hostable image optimization service, a drop-in replacement for Vercel's Image Optimization.
+> Forked from [coollabsio/next-image-transformation](https://github.com/coollabsio/next-image-transformation) with bug fixes and improvements.
 
-## Cloud with free global CDN
+An open-source & self-hostable image optimization service, a drop-in replacement for Vercel's Image Optimization. Built with [Bun](https://bun.sh/) and [imgproxy](https://imgproxy.net/).
 
-The cloud version, with free global CDN and simple pricing available here: https://images.coollabs.io
+## What's Improved
 
-## Try it out 
+This fork fixes critical issues and adds features missing from the original:
 
-- Change the `width` query parameter to see the image resize on the fly.
-- Add the `height` query parameter to see the image crop on the fly.
-- Add the `quality` query parameter to see the image quality change on the fly.
+### Bug Fixes
+- **Proper error status codes** — The original returns `200 OK` for failed image fetches (e.g., "Source image is unreachable"), causing CDNs like Cloudflare to cache broken responses. This fork returns proper `4xx`/`5xx` status codes.
+- **`Cache-Control: no-store` on errors** — Error responses include `no-store` headers so CDNs never cache failures.
+- **Invalid URL handling** — Malformed image URLs return `400 Bad Request` instead of crashing.
 
-https://image.coollabs.io/image/https://cdn.coollabs.io/images/image1.jpg?width=500
+### New Features
+- **WebP/AVIF auto-negotiation** — Forwards the browser's `Accept` header to imgproxy so it can serve the optimal format (WebP, AVIF) based on browser support, instead of hardcoding the Accept header.
+- **Configurable cache TTL** — Set `CACHE_TTL` env var to control how long successful images are cached (default: 30 days).
+- **`Cache-Control` on success** — Successful responses include proper `Cache-Control` headers with `stale-while-revalidate` for optimal CDN behavior.
+- **SVG/GIF/ICO passthrough** — These formats bypass imgproxy processing (which would break them) and are proxied directly from the source.
+- **`fit` mode support** — Map Next.js `objectFit` values (`cover`, `contain`, `fill`, `none`) to imgproxy resize types via the `fit` query parameter.
 
-## Includes
-1. Next Image Transformation API.
-   - A simple API written in Bun that transforms the incoming request to Imgproxy format and forwards it to the Imgproxy service.
-2. Imgproxy service.
-   - A powerful and fast image processing service that can resize, crop, and transform images on the fly.
+## Supported Transformations
 
-## How to deploy with Coolify
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `width` | Target width in pixels | `0` (original) |
+| `height` | Target height in pixels | `0` (original) |
+| `quality` | Image quality (1-100) | `75` |
+| `fit` | Resize mode: `cover`, `contain`, `fill`, `none` | `cover` |
+
+## Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `IMGPROXY_URL` | URL of the imgproxy service | `http://imgproxy:8080` |
+| `ALLOWED_REMOTE_DOMAINS` | Comma-separated list of allowed source domains. Use `*` for all. Supports wildcards (e.g., `*.example.com`) | `*` |
+| `CACHE_TTL` | Cache TTL in seconds for successful responses | `2592000` (30 days) |
+
+## How to Deploy with Coolify
+
 1. Login to your [Coolify](https://coolify.io) instance or the [cloud](https://app.coolify.io).
-2. Create a new service and select the `Next.js Image Transformation` template.
-3. Optional: Set the `ALLOWED_REMOTE_DOMAINS` environment variable to the domain of your images (e.g. `example.com,coolify.io`). By default, it is set to `*` which allows any domain.
-4. Set the your `<domain>` on the `Next Image Transformation` service.
-5. Deploy your service.
+2. Create a new Docker Compose service using this repo's `docker-compose.yaml`.
+3. Change the image from `ghcr.io/coollabsio/next-image-transformation` to `ghcr.io/r0bdiabl0/next-image-transformation`.
+4. Optional: Set `ALLOWED_REMOTE_DOMAINS` to restrict which domains can be optimized.
+5. Set your `<domain>` on the service.
+6. Deploy.
 
-## How to use in Next.js
-1. In `next.config.js` add the following:
+## How to Use in Next.js
+
+1. In `next.config.js`, configure a custom image loader:
+
 ```javascript
 module.exports = {
   images: {
     loader: 'custom',
-    loaderFile: './loader.js',
+    loaderFile: './src/lib/imageLoader.ts', // or ./loader.js
   },
 }
 ```
-2. Create a file called `loader.js` in the root of your project and add the following:
-```javascript
-'use client'
 
-export default function myImageLoader({ src, width, quality }) {
-    const isLocal = !src.startsWith('http');
-    const query = new URLSearchParams();
+2. Create the loader file:
 
-    const imageOptimizationApi = '<image-optimization-domain>';
-    // Your NextJS application URL
-    const baseUrl = '<your-nextjs-app-domain>';
+```typescript
+interface ImageLoaderProps {
+  src: string;
+  width: number;
+  quality?: number;
+}
 
-    const fullSrc = `${baseUrl}${src}`;
+export default function imageLoader({ src, width, quality }: ImageLoaderProps): string {
+  const imageServiceUrl = process.env.NEXT_PUBLIC_IMAGE_SERVICE_URL;
 
-    if (width) query.set('width', width);
-    if (quality) query.set('quality', quality);
+  if (!imageServiceUrl) {
+    return src;
+  }
 
-    if (isLocal && process.env.NODE_ENV === 'development') {
-        return src;
-    }
-    if (isLocal) {
-        return `${imageOptimizationApi}/image/${fullSrc}?${query.toString()}`;
-    }
-    return `${imageOptimizationApi}/image/${src}?${query.toString()}`;
+  let imageUrl = src;
+  if (src.startsWith('/')) {
+    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://example.com';
+    imageUrl = `${baseUrl}${src}`;
+  }
+
+  const params = new URLSearchParams();
+  params.set('width', width.toString());
+  if (quality) params.set('quality', quality.toString());
+
+  return `${imageServiceUrl}/image/${imageUrl}?${params.toString()}`;
 }
 ```
 
-- Replace `<image-optimization-domain>` with the URL of what you set on the `Next Image Transformation API`.
-- Replace `<your-nextjs-app-domain>` with the URL of your Nextjs application.
+## Includes
 
-## Currently supported transformations
-- width
-- height
-- quality
+1. **Next Image Transformation API** — A Bun server that transforms incoming requests to imgproxy format.
+2. **imgproxy** — A fast image processing service that resizes, crops, and converts images on the fly.
+
+## Self-Hosting with Docker Compose
+
+```bash
+docker compose up -d
+```
+
+The service will be available at `http://localhost:3000`.
+
+## License
+
+Same as the original — see [LICENSE](LICENSE).
