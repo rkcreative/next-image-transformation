@@ -41,7 +41,7 @@ This fork fixes critical issues and adds features missing from the original:
 
 1. Login to your [Coolify](https://coolify.io) instance or the [cloud](https://app.coolify.io).
 2. Create a new Docker Compose service using this repo's `docker-compose.yaml`.
-3. Change the image from `ghcr.io/coollabsio/next-image-transformation` to `ghcr.io/r0bdiabl0/next-image-transformation`.
+3. Change the image from `ghcr.io/coollabsio/next-image-transformation` to `ghcr.io/rkcreative/next-image-transformation`.
 4. Optional: Set `ALLOWED_REMOTE_DOMAINS` to restrict which domains can be optimized.
 5. Set your `<domain>` on the service.
 6. Deploy.

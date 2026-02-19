@@ -25,7 +25,7 @@ Bun.serve({
     const url = new URL(req.url);
     if (url.pathname === "/") {
       return new Response(
-        `<h3>Next Image Transformation v${version}</h3>More info <a href="https://github.com/r0bdiabl0/next-image-transformation">https://github.com/r0bdiabl0/next-image-transformation</a>.`,
+        `<h3>Next Image Transformation v${version}</h3>More info <a href="https://github.com/rkcreative/next-image-transformation">https://github.com/rkcreative/next-image-transformation</a>.`,
         {
           headers: {
             "Content-Type": "text/html",
@@ -40,7 +40,7 @@ Bun.serve({
     if (url.pathname.startsWith("/image/"))
       return await resize(url, req.headers);
     return Response.redirect(
-      "https://github.com/r0bdiabl0/next-image-transformation",
+      "https://github.com/rkcreative/next-image-transformation",
       302
     );
   },
@@ -68,7 +68,7 @@ async function resize(url, requestHeaders) {
   });
   if (allowed.length === 0) {
     return new Response(
-      `Domain (${origin}) not allowed. More details here: https://github.com/r0bdiabl0/next-image-transformation`,
+      `Domain (${origin}) not allowed. More details here: https://github.com/rkcreative/next-image-transformation`,
       {
         status: 403,
         headers: { "Cache-Control": "no-store, must-revalidate" },

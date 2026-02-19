@@ -1,6 +1,6 @@
 services:
   api:
-    image: ghcr.io/r0bdiabl0/next-image-transformation
+    image: ghcr.io/rkcreative/next-image-transformation
     ports:
       - "3000"
     environment:
