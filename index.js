@@ -227,9 +227,10 @@ async function resize(url, requestHeaders, requestOrigin) {
   }
 }
 
-// Allowed CORS origins — derived from ALLOWED_REMOTE_DOMAINS
-// e.g., *.swingular.com allows https://swingular.com, https://cdn.swingular.com, etc.
-const allowedCorsOrigins = process?.env?.ALLOWED_CORS_ORIGINS?.split(",").map(d => d.trim()) || ["*"];
+// CORS origins — reuse ALLOWED_REMOTE_DOMAINS since the same domains
+// that are allowed to serve images should also be allowed as CORS origins.
+// Can be overridden with ALLOWED_CORS_ORIGINS if different control is needed.
+const allowedCorsOrigins = (process?.env?.ALLOWED_CORS_ORIGINS || process?.env?.ALLOWED_REMOTE_DOMAINS)?.split(",").map(d => d.trim()) || ["*"];
 
 function isOriginAllowed(origin) {
   if (!origin) return false;
