@@ -6,6 +6,7 @@ services:
     environment:
       - NODE_ENV=production
       - ALLOWED_REMOTE_DOMAINS=*
+      - ALLOWED_CORS_ORIGINS=*.swingular.com
       - IMGPROXY_URL=http://imgproxy:8080
       - CACHE_TTL=2592000
     healthcheck:

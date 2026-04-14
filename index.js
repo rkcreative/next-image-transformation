@@ -1,4 +1,4 @@
-const version = "0.1.1";
+const version = "0.2.0";
 
 let allowedDomains = process?.env?.ALLOWED_REMOTE_DOMAINS?.split(",") || ["*"];
 let imgproxyUrl = process?.env?.IMGPROXY_URL || "http://imgproxy:8080";
@@ -59,8 +59,22 @@ Bun.serve({
     if (url.pathname === "/health") {
       return new Response("OK");
     }
+    // Handle CORS preflight requests
+    if (req.method === "OPTIONS") {
+      const origin = req.headers.get("Origin");
+      const headers = new Headers();
+      if (origin && isOriginAllowed(origin)) {
+        headers.set("Access-Control-Allow-Origin", origin);
+        headers.set("Access-Control-Allow-Methods", "GET, OPTIONS");
+        headers.set("Access-Control-Allow-Headers", "Accept, Content-Type");
+        headers.set("Access-Control-Max-Age", "86400");
+        headers.set("Vary", "Origin");
+      }
+      return new Response(null, { status: 204, headers });
+    }
+
     if (url.pathname.startsWith("/image/"))
-      return await resize(url, req.headers);
+      return await resize(url, req.headers, req.headers.get("Origin"));
     return Response.redirect(
       "https://github.com/rkcreative/next-image-transformation",
       302
@@ -68,7 +82,7 @@ Bun.serve({
   },
 });
 
-async function resize(url, requestHeaders) {
+async function resize(url, requestHeaders, requestOrigin) {
   const src = url.pathname.split("/").slice(2).join("/");
 
   let parsedSrc;
@@ -139,7 +153,7 @@ async function resize(url, requestHeaders) {
         });
       }
 
-      const headers = buildSafeHeaders(response.headers);
+      const headers = buildSafeHeaders(response.headers, requestOrigin);
       headers.set("Cache-Control", cacheHeader);
       return new Response(response.body, { headers });
     } catch (e) {
@@ -188,7 +202,7 @@ async function resize(url, requestHeaders) {
       clearTimeout(timeout);
     }
 
-    const headers = buildSafeHeaders(image.headers);
+    const headers = buildSafeHeaders(image.headers, requestOrigin);
 
     // If imgproxy returned an error, pass it through with no-cache
     if (!image.ok) {
@@ -213,8 +227,29 @@ async function resize(url, requestHeaders) {
   }
 }
 
+// Allowed CORS origins — derived from ALLOWED_REMOTE_DOMAINS
+// e.g., *.swingular.com allows https://swingular.com, https://cdn.swingular.com, etc.
+const allowedCorsOrigins = process?.env?.ALLOWED_CORS_ORIGINS?.split(",").map(d => d.trim()) || ["*"];
+
+function isOriginAllowed(origin) {
+  if (!origin) return false;
+  for (const pattern of allowedCorsOrigins) {
+    if (pattern === "*") return true;
+    if (pattern === origin) return true;
+    // Wildcard: *.swingular.com matches https://swingular.com and https://sub.swingular.com
+    if (pattern.startsWith("*.")) {
+      const domain = pattern.slice(2); // "swingular.com"
+      try {
+        const originHost = new URL(origin).hostname;
+        if (originHost === domain || originHost.endsWith("." + domain)) return true;
+      } catch {}
+    }
+  }
+  return false;
+}
+
 // Build a new Headers object with only safe headers forwarded from upstream
-function buildSafeHeaders(sourceHeaders) {
+function buildSafeHeaders(sourceHeaders, requestOrigin) {
   const headers = new Headers();
   for (const name of safeForwardHeaders) {
     const value = sourceHeaders.get(name);
@@ -222,5 +257,14 @@ function buildSafeHeaders(sourceHeaders) {
   }
   headers.set("Server", "NextImageTransformation");
   headers.set("X-Content-Type-Options", "nosniff");
+
+  // CORS: Allow requests from permitted origins
+  if (requestOrigin && isOriginAllowed(requestOrigin)) {
+    headers.set("Access-Control-Allow-Origin", requestOrigin);
+    headers.set("Vary", "Origin");
+  } else if (allowedCorsOrigins.includes("*")) {
+    headers.set("Access-Control-Allow-Origin", "*");
+  }
+
   return headers;
 }
