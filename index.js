@@ -1,4 +1,4 @@
-const version = "0.2.0";
+const version = "0.3.0";
 
 let allowedDomains = process?.env?.ALLOWED_REMOTE_DOMAINS?.split(",") || ["*"];
 let imgproxyUrl = process?.env?.IMGPROXY_URL || "http://imgproxy:8080";
@@ -40,49 +40,58 @@ const errorHeaders = {
   "Content-Type": "text/plain",
 };
 
-Bun.serve({
-  port: 3000,
-  async fetch(req) {
-    const url = new URL(req.url);
-    if (url.pathname === "/") {
-      return new Response(
-        `<h3>Next Image Transformation v${version}</h3>More info <a href="https://github.com/rkcreative/next-image-transformation">https://github.com/rkcreative/next-image-transformation</a>.`,
-        {
-          headers: {
-            "Content-Type": "text/html",
-            "X-Content-Type-Options": "nosniff",
-          },
-        }
-      );
-    }
+// Raster images (JPEG/PNG/WebP/AVIF sources) are always re-encoded to WebP.
+// The output format must NOT depend on the request's Accept header: the CDN
+// caches responses by URL alone, so a negotiated format would be served to
+// every browser that hits the same URL (e.g. AVIF to a browser without AVIF
+// support). Every browser we support decodes WebP.
+const OUTPUT_FORMAT = "webp";
+const OUTPUT_CONTENT_TYPE = "image/webp";
 
-    if (url.pathname === "/health") {
-      return new Response("OK");
-    }
-    // Handle CORS preflight requests
-    if (req.method === "OPTIONS") {
-      const origin = req.headers.get("Origin");
-      const headers = new Headers();
-      if (origin && isOriginAllowed(origin)) {
-        headers.set("Access-Control-Allow-Origin", origin);
-        headers.set("Access-Control-Allow-Methods", "GET, OPTIONS");
-        headers.set("Access-Control-Allow-Headers", "Accept, Content-Type");
-        headers.set("Access-Control-Max-Age", "86400");
-        headers.set("Vary", "Origin");
+export async function handleRequest(req) {
+  const url = new URL(req.url);
+  if (url.pathname === "/") {
+    return new Response(
+      `<h3>Next Image Transformation v${version}</h3>More info <a href="https://github.com/rkcreative/next-image-transformation">https://github.com/rkcreative/next-image-transformation</a>.`,
+      {
+        headers: {
+          "Content-Type": "text/html",
+          "X-Content-Type-Options": "nosniff",
+        },
       }
-      return new Response(null, { status: 204, headers });
-    }
-
-    if (url.pathname.startsWith("/image/"))
-      return await resize(url, req.headers, req.headers.get("Origin"));
-    return Response.redirect(
-      "https://github.com/rkcreative/next-image-transformation",
-      302
     );
-  },
-});
+  }
 
-async function resize(url, requestHeaders, requestOrigin) {
+  if (url.pathname === "/health") {
+    return new Response("OK");
+  }
+  // Handle CORS preflight requests
+  if (req.method === "OPTIONS") {
+    const origin = req.headers.get("Origin");
+    const headers = new Headers();
+    if (origin && isOriginAllowed(origin)) {
+      headers.set("Access-Control-Allow-Origin", origin);
+      headers.set("Access-Control-Allow-Methods", "GET, OPTIONS");
+      headers.set("Access-Control-Allow-Headers", "Accept, Content-Type");
+      headers.set("Access-Control-Max-Age", "86400");
+      headers.set("Vary", "Origin");
+    }
+    return new Response(null, { status: 204, headers });
+  }
+
+  if (url.pathname.startsWith("/image/"))
+    return await resize(url, req.headers.get("Origin"));
+  return Response.redirect(
+    "https://github.com/rkcreative/next-image-transformation",
+    302
+  );
+}
+
+if (import.meta.main) {
+  Bun.serve({ port: 3000, fetch: handleRequest });
+}
+
+async function resize(url, requestOrigin) {
   const src = url.pathname.split("/").slice(2).join("/");
 
   let parsedSrc;
@@ -184,18 +193,17 @@ async function resize(url, requestHeaders, requestOrigin) {
 
   try {
     const preset = "pr:sharp";
-    const imgproxyPath = `${imgproxyUrl}/${preset}/resize:${resizeType}:${width}:${height}/q:${quality}/plain/${src}`;
-
-    // Forward the browser's Accept header so imgproxy can negotiate format (WebP/AVIF)
-    const accept =
-      requestHeaders.get("Accept") || "image/avif,image/webp,image/apng,*/*";
+    const imgproxyPath = `${imgproxyUrl}/${preset}/resize:${resizeType}:${width}:${height}/q:${quality}/f:${OUTPUT_FORMAT}/plain/${src}`;
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), fetchTimeout);
     let image;
     try {
+      // The browser's Accept header is deliberately not forwarded (see
+      // OUTPUT_FORMAT); a fixed Accept keeps imgproxy's format detection
+      // settings from overriding the explicit f:webp option.
       image = await fetch(imgproxyPath, {
-        headers: { Accept: accept },
+        headers: { Accept: OUTPUT_CONTENT_TYPE },
         signal: controller.signal,
       });
     } finally {
@@ -215,6 +223,7 @@ async function resize(url, requestHeaders, requestOrigin) {
 
     // Set cache headers for successful responses
     headers.set("Cache-Control", cacheHeader);
+    headers.set("Content-Type", OUTPUT_CONTENT_TYPE);
 
     return new Response(image.body, { headers });
   } catch (e) {

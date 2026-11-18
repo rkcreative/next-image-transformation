@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "dev": "bun run --watch ./index.js",
-    "start": "bun run ./index.js"
+    "start": "bun run ./index.js",
+    "test": "bun test"
   },
   "devDependencies": {},
   "peerDependencies": {},

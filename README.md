@@ -14,7 +14,7 @@ This fork fixes critical issues and adds features missing from the original:
 - **Invalid URL handling** — Malformed image URLs return `400 Bad Request` instead of crashing.
 
 ### New Features
-- **WebP/AVIF auto-negotiation** — Forwards the browser's `Accept` header to imgproxy so it can serve the optimal format (WebP, AVIF) based on browser support, instead of hardcoding the Accept header.
+- **Fixed WebP output** — Raster images (JPEG, PNG, WebP, AVIF sources) are always re-encoded to WebP with `Content-Type: image/webp`, whatever the browser's `Accept` header says. The format used to be negotiated from `Accept` (WebP or AVIF) without a `Vary: Accept` header, so a CDN such as Cloudflare cached whichever format the first visitor got and served it to everyone — including AVIF to browsers that can't decode it. A fixed format keeps the URL a safe cache key; every browser we support decodes WebP. SVG, GIF and ICO are still passed through unchanged (see below).
 - **Configurable cache TTL** — Set `CACHE_TTL` env var to control how long successful images are cached (default: 30 days).
 - **`Cache-Control` on success** — Successful responses include proper `Cache-Control` headers with `stale-while-revalidate` for optimal CDN behavior.
 - **SVG/GIF/ICO passthrough** — These formats bypass imgproxy processing (which would break them) and are proxied directly from the source.
@@ -93,6 +93,12 @@ export default function imageLoader({ src, width, quality }: ImageLoaderProps): 
 
 1. **Next Image Transformation API** — A Bun server that transforms incoming requests to imgproxy format.
 2. **imgproxy** — A fast image processing service that resizes, crops, and converts images on the fly.
+
+## Tests
+
+```bash
+bun test
+```
 
 ## Self-Hosting with Docker Compose
 
